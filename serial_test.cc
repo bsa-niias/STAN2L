@@ -109,7 +109,7 @@ next_iteration:
         }
         else
         {
-            printf ("select return : %d (errno : %d)\n", iSysRoutineRes, errno);
+            printf ("\nselect return : %d (errno : %d)", iSysRoutineRes, errno); fflush (stdout);
             if (iSysRoutineRes == 0) continue; // Timeout
             else
             if (iSysRoutineRes < 0)  break;    // Error
