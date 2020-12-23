@@ -1,3 +1,7 @@
+//comment
+//  HELP for brain
+//       https://ru.stackoverflow.com/questions/376364/%D0%A7%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-select-%D0%B8-fd-isset
+
 // system include
 #include <stdio.h>
 #include <sys/types.h>
@@ -29,6 +33,7 @@ int main (int argc, char** argv)
 next_iteration:
 
    printf ("Hello, serial test!\n");
+   printf ("Version 0.0.001 (20201223.194000)!\n");
    printf ("Open serial port : /dev/ttyS2\n");
 
    // Read/Write, 
@@ -96,14 +101,19 @@ next_iteration:
         if (iSysRoutineRes > 0) 
         {
             if (FD_ISSET (iSerialDev, &fds_reads));
-            else; // IT IS VARY BAD!!!
+            else
+            {
+                // IT IS VARY BAD!!! - while break. Need for test
+                break;
+            }
         }
         else
         {
             printf ("select return : %d (errno : %d)\n", iSysRoutineRes, errno);
-            if (iSysRoutineRes == 0) continue;
+            if (iSysRoutineRes == 0) continue; // Timeout
             else
-            if (iSysRoutineRes < 0)  break; 
+            if (iSysRoutineRes < 0)  break;    // Error
+            else;
         }
 
         // Read data
