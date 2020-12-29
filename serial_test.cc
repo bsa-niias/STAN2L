@@ -13,6 +13,7 @@
 #include <string.h> // bzero (...),
 
 // dev include
+#include "crc/crc16.h"
 
 int main (int argc, char** argv)
 {
@@ -55,19 +56,19 @@ next_iteration:
 
    // new serial setting
    bzero (&tSer_new, sizeof (tSer_new));
-   iSysRoutineRes = cfsetispeed (&tSer_new, B600);   // speed
+   iSysRoutineRes = cfsetispeed (&tSer_new, B2400);   // speed
    printf ("cfsetispeed return : %d (errno : %d)\n", iSysRoutineRes, errno);
-   iSysRoutineRes = cfsetospeed (&tSer_new, B600);   
+   iSysRoutineRes = cfsetospeed (&tSer_new, B2400);   
    printf ("cfsetospeed return : %d (errno : %d)\n", iSysRoutineRes, errno);
 
    //tSer_new.c_cflag != BAUDRATE;     
    tSer_new.c_cflag |= (CLOCAL | CREAD);
    // 8N1
    //tSer_new.c_cflag &= ~CSIZE;     // size
-   tSer_new.c_cflag |= CS7;
+   tSer_new.c_cflag |= CS8;
    tSer_new.c_cflag &= ~PARENB;      // parity
-   //tSer.c_cflag &= ~CSTOPB;        // 1_stop - for example
-   tSer_new.c_cflag |= CSTOPB;       // 2_stop
+   tSer_new.c_cflag &= ~CSTOPB;        // 1_stop - for example
+   //tSer_new.c_cflag |= CSTOPB;       // 2_stop
    // Disable flow control
    tSer_new.c_cflag &= ~CRTSCTS;
    
@@ -121,7 +122,10 @@ next_iteration:
         iSysRoutineRes = read (iSerialDev, &read_c, read_size);
         if (iSysRoutineRes > 0) // read ok!
         {
-            printf ("%c", read_c);  fflush (stdout);
+            //printf ("%c", read_c);  fflush (stdout);
+            // Run crc16 routine
+            uint16_t uiTmp = CalculateCRC16 ((void*)&read_c, 1);
+            printf ("%c %d", read_c, uiTmp);  fflush (stdout);
         }
         else
         if (iSysRoutineRes == -1) // timeout or error!
