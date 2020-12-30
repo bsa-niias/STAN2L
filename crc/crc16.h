@@ -8,5 +8,6 @@
 extern uint16_t crc16_table [256];
 
 uint16_t CalculateCRC16 (void *pData, uint32_t uiDataLen);
+uint16_t RoutineChar2i (uint8_t uiCh);
 
 #endif

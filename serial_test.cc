@@ -11,6 +11,8 @@
 #include <errno.h>
 #include <termios.h>
 #include <string.h> // bzero (...),
+#include <stdint.h>
+#include <vector>
 
 // dev include
 #include "crc/crc16.h"
@@ -28,9 +30,17 @@ int main (int argc, char** argv)
    // for read
    char read_c;
    unsigned int read_size;
+   uint16_t uiCrc16Calc,
+            uiCrc16Recv;
+
+   bool bmsgStart;
+   std::vector<uint8_t> msgBuffer;
+   std::vector<uint8_t>::iterator BufferIterator;
+
    // for write
 
 //code
+   
 next_iteration:
 
    printf ("Hello, serial test!\n");
@@ -87,6 +97,7 @@ next_iteration:
 
    // call for none-blocking read
    //fcntl (fd, F_SETFL, FNDELAY);
+   bmsgStart = false;
    while (true)
    {
         //iSysRoutineRes = write (iSerialDev, "(ABCD)", 6);
@@ -122,10 +133,49 @@ next_iteration:
         iSysRoutineRes = read (iSerialDev, &read_c, read_size);
         if (iSysRoutineRes > 0) // read ok!
         {
-            //printf ("%c", read_c);  fflush (stdout);
-            // Run crc16 routine
-            uint16_t uiTmp = CalculateCRC16 ((void*)&read_c, 1);
-            printf ("%c %d", read_c, uiTmp);  fflush (stdout);
+            printf ("%c", read_c);
+            if (bmsgStart == false) // ищем начало сообщения
+            {
+               if (read_c =='(')
+               {
+                  bmsgStart = true;
+                  msgBuffer.push_back (static_cast<uint8_t>(read_c));
+               }
+               else; 
+            }
+            else
+            {
+                msgBuffer.push_back (static_cast<uint8_t>(read_c));
+                if (read_c == ')')
+                {
+                    if (msgBuffer.size () == 25)
+                    {
+                        printf (" <+NEW_MSG>");
+                        
+                        // Run crc16 routine
+                        //BufferIterator = msgBuffer.begin ();
+                        //BufferIterator++;
+                        uiCrc16Calc = CalculateCRC16 (& msgBuffer [1], 19);
+                        printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
+                        uiCrc16Recv = 0x0000;
+                        uiCrc16Recv  = RoutineChar2i (msgBuffer [23]);
+                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [22]) << 4);
+                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [21]) << 8);
+                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [20]) << 12);
+                        if (uiCrc16Calc == uiCrc16Recv)
+                            printf (" <+CRC16>", uiCrc16Recv);
+                        else;
+                    }
+                    else
+                    {
+                        printf (" <-BAD_MSG_LEN (%d)>", msgBuffer.size ());
+                    }
+                    bmsgStart = false;
+                    msgBuffer.clear ();
+                }
+                else;
+            } 
+            fflush (stdout);
         }
         else
         if (iSysRoutineRes == -1) // timeout or error!
