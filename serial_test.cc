@@ -15,7 +15,8 @@
 #include <vector>
 
 // dev include
-#include "crc/crc16.h"
+#include "source/crc/crc16.h"
+#include "source/cfg/prgmcfg.h"
 
 int main (int argc, char** argv)
 {
@@ -41,19 +42,26 @@ int main (int argc, char** argv)
 
 //code
    
+     ProgramConfig tums_cfg (".//tums_link.conf", "");
+     int tums_count = tums_cfg.GetIntParam ("TUMS.COUNT",0);
+     printf ("TUMSs : %d\n", tums_count);
+
 next_iteration:
 
    printf ("Hello, serial test!\n");
-   printf ("Version 0.0.001 (20201223.194000)!\n");
-   printf ("Open serial port : /dev/ttyS2\n");
+   printf ("Version 0.0.002 (20201231.130000)!\n");
+   printf ("Open serial port : %s\n", tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str());
 
    // Read/Write, 
    // No_TTY, 
    // No_DCD_check - none use
-   iSysRoutineRes = open ("/dev/ttyS2", O_RDWR | O_NOCTTY); // | O_NDELAY);  
+   iSysRoutineRes = open (tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str(), 
+                          O_RDWR | O_NOCTTY); // | O_NDELAY);  
    if (iSysRoutineRes == -1 )
    {
-        printf ("Error open SerialPort: /dev/ttyS2. Error code (%d)\n", errno);
+        printf ("Error open SerialPort: %s. Error code (%d)\n", 
+                tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str(),
+                errno);
         return errno;
    }
    else;
