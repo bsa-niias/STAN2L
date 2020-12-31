@@ -171,7 +171,7 @@ next_iteration:
                         uiCrc16Recv |= (RoutineChar2i (msgBuffer [21]) << 8);
                         uiCrc16Recv |= (RoutineChar2i (msgBuffer [20]) << 12);
                         if (uiCrc16Calc == uiCrc16Recv)
-                            printf (" <+CRC16>", uiCrc16Recv);
+                            printf (" <+CRC16>");
                         else;
                     }
                     else
