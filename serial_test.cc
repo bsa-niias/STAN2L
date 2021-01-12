@@ -65,6 +65,8 @@ next_iteration:
         return errno;
    }
    else;
+   printf ("open return (as handle) : %d (errno : %d)\n", iSysRoutineRes, errno);
+
    // Save serial port handle
    iSerialDev = iSysRoutineRes;
 
@@ -166,17 +168,17 @@ next_iteration:
                         uiCrc16Calc = CalculateCRC16 (& msgBuffer [1], 19);
                         printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
                         uiCrc16Recv = 0x0000;
-                        uiCrc16Recv  = RoutineChar2i (msgBuffer [23]);
-                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [22]) << 4);
-                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [21]) << 8);
-                        uiCrc16Recv |= (RoutineChar2i (msgBuffer [20]) << 12);
+                        uiCrc16Recv  =  RoutineCRC16Char2i16 (msgBuffer [23]);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (msgBuffer [22]) << 4);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (msgBuffer [21]) << 8);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (msgBuffer [20]) << 12);
                         if (uiCrc16Calc == uiCrc16Recv)
                             printf (" <+CRC16>");
                         else;
                     }
                     else
                     {
-                        printf (" <-BAD_MSG_LEN (%d)>", msgBuffer.size ());
+                        printf (" <-BAD_MSG_LEN (%zu)>", msgBuffer.size ());
                     }
                     bmsgStart = false;
                     msgBuffer.clear ();
