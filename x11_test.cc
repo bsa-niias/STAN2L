@@ -11,7 +11,7 @@
 #include <X11/Xlib.h>
 
 // Project include
-#include "prgmcfg.h"
+//#include "prgmcfg.h"
 
 namespace nsDisplay
 {
@@ -32,9 +32,9 @@ int main (void)
 //code
      std::cout << "Start Anaconda graf module ..." << std::endl;
 
-     ProgramConfig anaconda_cfg (".//pereezd.cfg", "");
-     int ml_count = anaconda_cfg.GetIntParam ("MAINLINE.COUNT",0);
-     std::cout << "MAINLINE.COUNT : " << ml_count << std::endl;
+     //ProgramConfig anaconda_cfg (".//pereezd.cfg", "");
+     //int ml_count = anaconda_cfg.GetIntParam ("MAINLINE.COUNT",0);
+     //std::cout << "MAINLINE.COUNT : " << ml_count << std::endl;
 
      nsDisplay::gDisplay = NULL;
      nsDisplay::gDisplay = XOpenDisplay (NULL);
@@ -63,12 +63,12 @@ int main (void)
      XMapWindow (nsDisplay::gDisplay, nsDisplay::BaseWin);
      XFlush (nsDisplay::gDisplay);
 
-     sleep (50);
+     sleep (5);
 
      XDestroyWindow (nsDisplay::gDisplay, nsDisplay::BaseWin);
      if (nsDisplay::gDisplay != NULL) 
         XCloseDisplay (nsDisplay::gDisplay);
      else;
 
-     return 1;
+     return 0;
 }
