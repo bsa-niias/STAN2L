@@ -20,6 +20,7 @@ namespace nsDisplay
      static Window gWindow {0};
 
      Window BaseWin;
+     Window ChildWin;
 };
 
 //ProgramConfig* anaconda_cfg = NULL;
@@ -62,7 +63,19 @@ int main (void)
                                               );
      XMapWindow (nsDisplay::gDisplay, nsDisplay::BaseWin);
      XFlush (nsDisplay::gDisplay);
-
+/*     
+     nsDisplay::ChildWin = XCreateSimpleWindow (nsDisplay::gDisplay,
+                                               nsDisplay::BaseWin,
+                                               200, 200,
+                                               400, 400,
+                                               0, 0,
+                                               WhitePixel (nsDisplay::gDisplay, nsDisplay::gScreen)
+                                              );
+     
+     //XMapWindow (nsDisplay::gDisplay, nsDisplay::BaseWin);
+     XMapWindow (nsDisplay::gDisplay, nsDisplay::ChildWin);
+     XFlush (nsDisplay::gDisplay);
+*/
      sleep (5);
 
      XDestroyWindow (nsDisplay::gDisplay, nsDisplay::BaseWin);

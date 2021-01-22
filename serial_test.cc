@@ -198,20 +198,20 @@ next_iteration:
                 tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
                 if (read_c == ')')
                 {
-                    if (tums1_conn_ref.msgBuffer.size () == 28)
+                    if (tums1_conn_ref.msgBuffer.size () == 31)
                     {
                         printf (" <+NEW_MSG>");
                         
                         // Run crc16 routine
                         //BufferIterator = msgBuffer.begin ();
                         //BufferIterator++;
-                        uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msgBuffer [1], 22);
+                        uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msgBuffer [1], 25);
                         printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
                         uiCrc16Recv = 0x0000;
-                        uiCrc16Recv  =  RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [26]);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [25]) << 4);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [24]) << 8);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [23]) << 12);
+                        uiCrc16Recv  =  RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [29]);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [28]) << 4);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [27]) << 8);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [26]) << 12);
                         if (uiCrc16Calc == uiCrc16Recv)
                             printf (" <+CRC16>");
                         else;
