@@ -32,6 +32,24 @@ typedef struct
 //    
 } TSerial;
 
+typedef struct 
+{
+    uint8_t _BracketStart;
+    uint8_t _StationID [6];
+    uint8_t _MsgNum [4];
+    uint8_t _DataHead;
+    uint8_t _DataGroup;
+    uint8_t _DataSubGroup;
+    uint8_t _Data [5];
+    uint8_t _ChannelStatus;
+    uint8_t _DiagType;
+    uint8_t _Diag [5];
+    uint8_t _Mif;
+    uint8_t _CRC16 [4];
+    uint8_t _BracketEnd;
+//
+} __attribute__((packed)) TTUMSIn;
+
 const uint32_t TUMS_MAX = 8; // index == 0 ignored !!!
 const uint32_t TUMS_FIRST_IDX = 1;
 namespace nsTUMS
