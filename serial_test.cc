@@ -28,7 +28,7 @@ typedef struct
     timeval tv_reads; 
     bool bmsgStart;
     std::vector<uint8_t> msgBuffer;
-    std::vector<uint8_t>::iterator BufferIterator;
+    //std::vector<uint8_t>::iterator BufferIterator;
 //    
 } TSerial;
 
@@ -72,7 +72,8 @@ int main (int argc, char** argv)
    unsigned int read_size;
    uint16_t uiCrc16Calc,
             uiCrc16Recv;
-
+   TTUMSIn* uvk_msg_dump = NULL;
+   
    // for write
 
 //code
@@ -219,17 +220,22 @@ next_iteration:
                     if (tums1_conn_ref.msgBuffer.size () == 32)
                     {
                         printf (" <+NEW_MSG>");
-                        
+                        uvk_msg_dump = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
                         // Run crc16 routine
                         //BufferIterator = msgBuffer.begin ();
                         //BufferIterator++;
-                        uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msgBuffer [1], 26);
+                        //uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msgBuffer [1], 26);
+                        uiCrc16Calc = CalculateCRC16 (&uvk_msg_dump->_StationID [0], 26);
                         printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
                         uiCrc16Recv = 0x0000;
-                        uiCrc16Recv  =  RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [30]);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [29]) << 4);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [28]) << 8);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [27]) << 12);
+                        //uiCrc16Recv  =  RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [30]);
+                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [29]) << 4);
+                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [28]) << 8);
+                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [27]) << 12);
+                        uiCrc16Recv  =  RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [3]);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [2]) << 4);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [1]) << 8);
+                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [0]) << 12);
                         if (uiCrc16Calc == uiCrc16Recv)
                             printf (" <+CRC16>");
                         else;
