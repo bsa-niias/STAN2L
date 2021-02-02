@@ -73,7 +73,7 @@ uint16_t CalculateCRC16 (void *pData, uint32_t uiDataLen)
 }
 */
 
-uint16_t RoutineCRC16Char2i16 (uint8_t uiCh)
+uint16_t RoutineCRC16Char2ui16 (uint8_t uiCh)
 {
     switch (uiCh)
     {
@@ -101,4 +101,28 @@ uint16_t RoutineCRC16Char2i16 (uint8_t uiCh)
         case 'F' : return 0x000F;
     }
     return 0xFFFF;
+}
+
+uint8_t RoutineCRC16ui162Char (uint16_t ui)
+{
+    switch (ui)
+    {
+        case 0      : return '0';
+        case 1      : return '1';
+        case 2      : return '2';
+        case 3      : return '3';
+        case 4      : return '4';
+        case 5      : return '5';
+        case 6      : return '6';
+        case 7      : return '7';
+        case 8      : return '8';
+        case 9      : return '9';
+        case 0x000A : return 'A';
+        case 0x000B : return 'B';
+        case 0x000C : return 'C';
+        case 0x000D : return 'D';
+        case 0x000E : return 'E';
+        case 0x000F : return 'F';
+    }
+    return '*';
 }

@@ -50,8 +50,38 @@ typedef struct
 //
 } __attribute__((packed)) TTUMSIn;
 
-const uint32_t TUMS_MAX = 8; // index == 0 ignored !!!
+typedef struct
+{
+    TTUMSIn _TUMSMessage;
+    uint8_t _ps;
+    uint8_t _vk;
+//
+} __attribute__((packed)) TTUMSInPacket;
+
+typedef struct 
+{
+    uint8_t _BracketStart;
+    uint8_t _StationID [6];
+    uint8_t _MsgNum [4];
+    uint8_t _DataHead;
+    uint8_t _DataGroup;
+    uint8_t _DataSubGroup;
+    uint8_t _CRC16 [4];
+    uint8_t _BracketEnd;
+//    
+} __attribute__((packed)) TTUMSOut;
+
+typedef struct 
+{
+    TTUMSOut _ARMMessage;
+    uint8_t  _ps;
+    uint8_t  _vk;
+//
+} __attribute__((packed)) TTUMSOutPacket;
+
+const uint32_t TUMS_MAX       = 8; // index == 0 ignored !!!
 const uint32_t TUMS_FIRST_IDX = 1;
+
 namespace nsTUMS
 {
     int count = 0;
@@ -75,10 +105,13 @@ int main (int argc, char** argv)
    TTUMSIn* uvk_msg_dump = NULL;
    
    // for write
+   TTUMSOutPacket arm_msg_dump;
+   //uint8_t arm_msg_ps;
+   //uint8_t arm_msg_vk;
 
 //code
     printf ("Start stan module (port for linux) ... \n");
-    printf ("Version 0.0.xxxx (20210111.xx:xx:xx)!\n");
+    printf ("Version 0.0.xxxx (20210201.xx:xx:xx)!\n");
 
     // get configuration
     ProgramConfig tums_cfg (".//tums_link.conf", "");
@@ -96,7 +129,6 @@ int main (int argc, char** argv)
         return -1;
     }
     else;
-
 
 next_iteration:
 
@@ -188,10 +220,10 @@ next_iteration:
         }
         else
         {
-            printf ("\nselect return : %d (errno : %d)", iSysRoutineRes, errno); fflush (stdout);
-            if (iSysRoutineRes == 0) continue; // Timeout
+            printf ("select return : %d (errno : %d)\n", iSysRoutineRes, errno); fflush (stdout);
+            if (iSysRoutineRes == 0) continue; // Timeout == 2 sec. Sleep not need
             else
-            if (iSysRoutineRes < 0)  break;    // Error
+            if (iSysRoutineRes < 0)  break;    // Error -> reconection!
             else;
         }
 
@@ -205,40 +237,65 @@ next_iteration:
             printf ("%c", read_c);
             if (tums1_conn_ref.bmsgStart == false) // ищем начало сообщения
             {
-               if (read_c =='(') // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы
-               {
-                  tums1_conn_ref.bmsgStart = true;
-                  tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
-               }
-               else; 
+                if (read_c =='(') // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы
+                {
+                    tums1_conn_ref.bmsgStart = true;
+                    tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
+                }
+                else; 
             }
             else
             {
                 tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
                 if (read_c == ')')
                 {
-                    if (tums1_conn_ref.msgBuffer.size () == 32)
+                    if (tums1_conn_ref.msgBuffer.size () == sizeof (TTUMSIn)) // 32 
                     {
                         printf (" <+NEW_MSG>");
                         uvk_msg_dump = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
                         // Run crc16 routine
-                        //BufferIterator = msgBuffer.begin ();
-                        //BufferIterator++;
-                        //uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msgBuffer [1], 26);
-                        uiCrc16Calc = CalculateCRC16 (&uvk_msg_dump->_StationID [0], 26);
+                        // Skeep '(', ')', CRC16 field
+                        uiCrc16Calc = CalculateCRC16 (&uvk_msg_dump->_StationID [0], sizeof (TTUMSIn)-1-4-1); //26
                         printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
                         uiCrc16Recv = 0x0000;
-                        //uiCrc16Recv  =  RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [30]);
-                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [29]) << 4);
-                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [28]) << 8);
-                        //uiCrc16Recv |= (RoutineCRC16Char2i16 (tums1_conn_ref.msgBuffer [27]) << 12);
-                        uiCrc16Recv  =  RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [3]);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [2]) << 4);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [1]) << 8);
-                        uiCrc16Recv |= (RoutineCRC16Char2i16 (uvk_msg_dump->_CRC16 [0]) << 12);
+                        uiCrc16Recv  =  RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [3]);
+                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [2]) << 4);
+                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [1]) << 8);
+                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [0]) << 12);
                         if (uiCrc16Calc == uiCrc16Recv)
                             printf (" <+CRC16>");
                         else;
+
+                        // send answer
+                        bzero (&arm_msg_dump, sizeof (TTUMSOutPacket));
+                        arm_msg_dump._ARMMessage._BracketStart = '(';
+                        arm_msg_dump._ARMMessage._StationID [0] = uvk_msg_dump->_StationID [0];
+                        arm_msg_dump._ARMMessage._StationID [1] = uvk_msg_dump->_StationID [1];
+                        arm_msg_dump._ARMMessage._StationID [2] = uvk_msg_dump->_StationID [2];
+                        arm_msg_dump._ARMMessage._StationID [3] = uvk_msg_dump->_StationID [3];
+                        arm_msg_dump._ARMMessage._StationID [4] = uvk_msg_dump->_StationID [4];
+                        arm_msg_dump._ARMMessage._StationID [5] = uvk_msg_dump->_StationID [5];
+                        arm_msg_dump._ARMMessage._MsgNum [0]    = uvk_msg_dump->_MsgNum [0];
+                        arm_msg_dump._ARMMessage._MsgNum [1]    = uvk_msg_dump->_MsgNum [1];
+                        arm_msg_dump._ARMMessage._MsgNum [2]    = uvk_msg_dump->_MsgNum [2];
+                        arm_msg_dump._ARMMessage._MsgNum [3]    = uvk_msg_dump->_MsgNum [3];
+                        arm_msg_dump._ARMMessage._DataHead      = 'A'; //uvk_msg_dump->_DataHead;
+                        arm_msg_dump._ARMMessage._DataGroup     = uvk_msg_dump->_DataGroup;
+                        arm_msg_dump._ARMMessage._DataSubGroup  = uvk_msg_dump->_DataSubGroup;
+                        uiCrc16Calc = CalculateCRC16 (&arm_msg_dump._ARMMessage._StationID [0], 13/*sizeof (TTUMSOut)-2-4*/); //13
+                        arm_msg_dump._ARMMessage._CRC16 [3]     =  RoutineCRC16ui162Char ( uiCrc16Calc & 0x000F);
+                        arm_msg_dump._ARMMessage._CRC16 [2]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x00F0) >> 4);
+                        arm_msg_dump._ARMMessage._CRC16 [1]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x0F00) >> 8);
+                        arm_msg_dump._ARMMessage._CRC16 [0]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0xF000) >> 12);
+                        arm_msg_dump._ARMMessage._BracketEnd    = ')';
+                        arm_msg_dump._ps = 10;
+                        //iSysRoutineRes = write (tums1_conn_ref.handle, &arm_msg_ps, 1);
+                        arm_msg_dump._vk = 13;
+                        //iSysRoutineRes = write (tums1_conn_ref.handle, &arm_msg_vk, 1);
+                        //arm_msg_dump._asterix = '*';
+                        iSysRoutineRes = write (tums1_conn_ref.handle, 
+                                                &arm_msg_dump._ARMMessage, 
+                                                sizeof (TTUMSOutPacket));
                     }
                     else
                     {
@@ -256,14 +313,14 @@ next_iteration:
         {
             if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
             {
-                 printf ("<TIME_OUT>");  fflush (stdout);
-                 usleep (10000);
-                 continue;
+                printf ("<TIME_OUT>");  fflush (stdout);
+                usleep (10000);
+                continue;
             }
             else
             {  
-                 printf ("read return : %d (errno : %d)\n", iSysRoutineRes, errno);
-                 break;
+                printf ("read return : %d (errno : %d)\n", iSysRoutineRes, errno);
+                break;
             }
         }
         else
@@ -272,7 +329,8 @@ next_iteration:
             break;
         }
    }
-
+   // close connection - "select" or "read" return < 0
    close (tums1_conn_ref.handle);
+
    goto next_iteration; // XA-XA-XA
 }
