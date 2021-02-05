@@ -14,23 +14,15 @@
 #include <stdint.h>
 #include <vector>
 #include <assert.h>
+#include <pthread.h>
 
 // dev include
 #include "source/crc/crc16.h"
 #include "source/cfg/prgmcfg.h"
-
-typedef struct 
-{
-    int     handle;
-    struct  termios tio_old; 
-    struct  termios tio;
-    fd_set  fds_reads;
-    timeval tv_reads; 
-    bool bmsgStart;
-    std::vector<uint8_t> msgBuffer;
-    //std::vector<uint8_t>::iterator BufferIterator;
-//    
-} TSerial;
+#include "mtx.hpp"
+#include "console.hpp"
+#include "sp.hpp"     // class SerialPort { ... }
+#include "circlebuf.hpp"
 
 typedef struct 
 {
@@ -79,258 +71,302 @@ typedef struct
 //
 } __attribute__((packed)) TTUMSOutPacket;
 
+// struct for connection with TUMS_n with using serial port
+// - in global namespace
+// - init in routine "main"
+// - using in pthread routine
+typedef struct
+{
+public:
+    uint32_t      id;       // for output console stream
+    std::string   devName;  // device name
+    SerialPort_r  sp_read;
+    SerialPort_w  sp_write;
+    CircleBufferHelper<uint8_t> dataBuffer;
+
+    bool          msgStart;
+    std::vector<uint8_t> msgBuffer;
+
+    TTUMSIn*      msg_in;
+    TTUMSOut      msg_out; 
+//    
+} TSerial;
+
 const uint32_t TUMS_MAX       = 8; // index == 0 ignored !!!
 const uint32_t TUMS_FIRST_IDX = 1;
 
 namespace nsTUMS
 {
     int count = 0;
-    TSerial TUMS_conn [TUMS_MAX+1];
+    TSerial TUMS_conn [TUMS_MAX+1]; // index 0 - none use
 };
 
-int main (int argc, char** argv)
+////////
+// thread_serial_work
+////////
+static void* thread_tums_serial (void* thread_param)
 {
 //var
-   // configuration
+    TSerial* conn = NULL;
+    int SysRoutineRes = -1;
+    char read_c;
 
-   // serial connection
-   int iSysRoutineRes = -1;
-   TSerial& tums1_conn_ref = nsTUMS::TUMS_conn [TUMS_FIRST_IDX];
-
-   // for read
-   char read_c;
-   unsigned int read_size;
-   uint16_t uiCrc16Calc,
-            uiCrc16Recv;
-   TTUMSIn* uvk_msg_dump = NULL;
-   
-   // for write
-   TTUMSOutPacket arm_msg_dump;
-   //uint8_t arm_msg_ps;
-   //uint8_t arm_msg_vk;
-
-//code
-    printf ("Start stan module (port for linux) ... \n");
-    printf ("Version 0.0.xxxx (20210201.xx:xx:xx)!\n");
-
-    // get configuration
-    ProgramConfig tums_cfg (".//tums_link.conf", "");
-    nsTUMS::count = tums_cfg.GetIntParam ("TUMS.COUNT",0);
-    printf ("TUMSs : %d\n", nsTUMS::count);
-    if (nsTUMS::count <= 0)
+//thread_code
+    if (thread_param == NULL) 
     {
-        printf ("No any TUMS's. Check \"tums_link.conf\". Exit (sorry)!\n");
-        return -1;
-    }
-    else;
-    if (nsTUMS::count > TUMS_MAX)
-    {
-        printf ("Any more TUMS's (max 16). Check \"tums_link.conf\". Exit (sorry)!\n");
-        return -1;
+        std::cout << ConsoleLock << "\"thread_param\" invalid. Exit." << std::endl << ConsoleUnlock;
+        pthread_exit (reinterpret_cast<void*>(0xE0000001));
     }
     else;
 
-next_iteration:
+    // global memory from "main" routine
+    conn = (TSerial*)thread_param;
+    std::cout << ConsoleLock << "\"thread_id\"=" << conn->id << " start ..." << std::endl << ConsoleUnlock;
 
-   printf ("Open serial port : %s\n", tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str());
-
-   // Read/Write, 
-   // No_TTY, 
-   // No_DCD_check - none use
-   iSysRoutineRes = open (tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str(), 
-                          O_RDWR | O_NOCTTY); // | O_NDELAY);  
-   if (iSysRoutineRes == -1 )
-   {
-        printf ("Error open SerialPort: %s. Error code (%d)\n", 
-                tums_cfg.GetStringParam ("TUMS.1.LINK.SERIAL.DEVICE", "null").c_str(),
-                errno);
-        return errno;
-   }
-   else;
-   printf ("open return (as handle) : %d (errno : %d)\n", iSysRoutineRes, errno);
-
-   // Save serial port handle
-   //iSerialDev = iSysRoutineRes;
-   //tums_conn_1 = &nsTUMS::TUMS_conn [TUMS_FIRST_IDX];
-   //assert (tums_conn_1);
-   tums1_conn_ref.handle = iSysRoutineRes;
-
-   // Set serial port control flags
-   iSysRoutineRes = tcgetattr (tums1_conn_ref.handle, 
-                               &tums1_conn_ref.tio_old); // get old 
-   printf ("tcgetattr return : %d (errno : %d)\n", iSysRoutineRes, errno);
-
-   // new serial setting
-   bzero (&tums1_conn_ref.tio, sizeof (tums1_conn_ref.tio));
-   iSysRoutineRes = cfsetispeed (&tums1_conn_ref.tio, B2400);   // speed
-   printf ("cfsetispeed return : %d (errno : %d)\n", iSysRoutineRes, errno);
-   iSysRoutineRes = cfsetospeed (&tums1_conn_ref.tio, B2400);   
-   printf ("cfsetospeed return : %d (errno : %d)\n", iSysRoutineRes, errno);
-
-   //tums1_conn_ref.tio.c_cflag != BAUDRATE;     
-   tums1_conn_ref.tio.c_cflag |= (CLOCAL | CREAD);
-   // 8N1
-   //tums1_conn_ref.tio.c_cflag &= ~CSIZE;     // size
-   tums1_conn_ref.tio.c_cflag |= CS8;
-   tums1_conn_ref.tio.c_cflag &= ~PARENB;      // parity
-   tums1_conn_ref.tio.c_cflag &= ~CSTOPB;        // 1_stop - for example
-   //tums1_conn_ref.tio.c_cflag |= CSTOPB;       // 2_stop
-   // Disable flow control
-   tums1_conn_ref.tio.c_cflag &= ~CRTSCTS;
-   
-   //tums1_conn_ref.tio.c_cflag &= ~(IXON | IXOFF | IXANY);
-   //tums1_conn_ref.tio.c_cflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-   tums1_conn_ref.tio.c_lflag = 0;
-   tums1_conn_ref.tio.c_oflag = 0;
-   tums1_conn_ref.tio.c_iflag = IGNPAR;         // ignore parity error
-
-   tums1_conn_ref.tio.c_cc [VTIME] = 0;
-   tums1_conn_ref.tio.c_cc [VMIN]  = 1;
-
-   iSysRoutineRes = tcsetattr (tums1_conn_ref.handle, 
-                               TCSANOW, 
-                               &tums1_conn_ref.tio);
-   printf ("tcsetattr return : %d (errno : %d)\n", iSysRoutineRes, errno);
-
-   // call for none-blocking read
-   //fcntl (fd, F_SETFL, FNDELAY);
-   tums1_conn_ref.bmsgStart = false;
-   while (true)
-   {
-        FD_ZERO (&tums1_conn_ref.fds_reads);       
-        FD_SET  (tums1_conn_ref.handle, 
-                &tums1_conn_ref.fds_reads);
-        tums1_conn_ref.tv_reads.tv_sec  = 2;
-        tums1_conn_ref.tv_reads.tv_usec = 0;
-        iSysRoutineRes = select (1+tums1_conn_ref.handle, 
-                                 &tums1_conn_ref.fds_reads, 
-                                 0, 
-                                 0, 
-                                 &tums1_conn_ref.tv_reads);
-
-        if (iSysRoutineRes > 0) 
+    while (true)
+    {
+        SysRoutineRes = conn->sp_read.wait ();
+        
+        if (SysRoutineRes > 0)
         {
-            if (FD_ISSET (tums1_conn_ref.handle, 
-                          &tums1_conn_ref.fds_reads));
-            else
-            {
-                // IT IS VARY BAD!!! - while break. Need for test
-                break;
-            }
+            //if (FD_ISSET (conn->sp_read.getDeviceHandle (), &conn->fds_reads)); 
+            //else
+            //{
+            //    break; // Error - reconection!
+            //}
         }
         else
         {
-            printf ("select return : %d (errno : %d)\n", iSysRoutineRes, errno); fflush (stdout);
-            if (iSysRoutineRes == 0) continue; // Timeout == 2 sec. Sleep not need
+            std::cout << ConsoleLock 
+                      << "select return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
+                      << ConsoleUnlock;
+            if (SysRoutineRes == 0) continue; // Timeout == 2 sec. Sleep not need
             else
-            if (iSysRoutineRes < 0)  break;    // Error -> reconection!
+            if (SysRoutineRes < 0)  break;    // Error -> reconection!
             else;
         }
+        // read data
+        SysRoutineRes = conn->sp_read.Read_1b (&read_c);
+        conn->dataBuffer.put (read_c);
 
-        // Read data
-        read_size = 1;
-        iSysRoutineRes = read (tums1_conn_ref.handle, 
-                               &read_c, 
-                               read_size);
-        if (iSysRoutineRes > 0) // read ok!
+        if (SysRoutineRes > 0) // read ok!
         {
-            printf ("%c", read_c);
-            if (tums1_conn_ref.bmsgStart == false) // ищем начало сообщения
-            {
-                if (read_c =='(') // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы
-                {
-                    tums1_conn_ref.bmsgStart = true;
-                    tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
-                }
-                else; 
-            }
-            else
-            {
-                tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(read_c));
-                if (read_c == ')')
-                {
-                    if (tums1_conn_ref.msgBuffer.size () == sizeof (TTUMSIn)) // 32 
-                    {
-                        printf (" <+NEW_MSG>");
-                        uvk_msg_dump = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
-                        // Run crc16 routine
-                        // Skeep '(', ')', CRC16 field
-                        uiCrc16Calc = CalculateCRC16 (&uvk_msg_dump->_StationID [0], sizeof (TTUMSIn)-1-4-1); //26
-                        printf (" <CRC16 = 0x%04X>", uiCrc16Calc);
-                        uiCrc16Recv = 0x0000;
-                        uiCrc16Recv  =  RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [3]);
-                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [2]) << 4);
-                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [1]) << 8);
-                        uiCrc16Recv |= (RoutineCRC16Char2ui16 (uvk_msg_dump->_CRC16 [0]) << 12);
-                        if (uiCrc16Calc == uiCrc16Recv)
-                            printf (" <+CRC16>");
-                        else;
-
-                        // send answer
-                        bzero (&arm_msg_dump, sizeof (TTUMSOutPacket));
-                        arm_msg_dump._ARMMessage._BracketStart = '(';
-                        arm_msg_dump._ARMMessage._StationID [0] = uvk_msg_dump->_StationID [0];
-                        arm_msg_dump._ARMMessage._StationID [1] = uvk_msg_dump->_StationID [1];
-                        arm_msg_dump._ARMMessage._StationID [2] = uvk_msg_dump->_StationID [2];
-                        arm_msg_dump._ARMMessage._StationID [3] = uvk_msg_dump->_StationID [3];
-                        arm_msg_dump._ARMMessage._StationID [4] = uvk_msg_dump->_StationID [4];
-                        arm_msg_dump._ARMMessage._StationID [5] = uvk_msg_dump->_StationID [5];
-                        arm_msg_dump._ARMMessage._MsgNum [0]    = uvk_msg_dump->_MsgNum [0];
-                        arm_msg_dump._ARMMessage._MsgNum [1]    = uvk_msg_dump->_MsgNum [1];
-                        arm_msg_dump._ARMMessage._MsgNum [2]    = uvk_msg_dump->_MsgNum [2];
-                        arm_msg_dump._ARMMessage._MsgNum [3]    = uvk_msg_dump->_MsgNum [3];
-                        arm_msg_dump._ARMMessage._DataHead      = 'A'; //uvk_msg_dump->_DataHead;
-                        arm_msg_dump._ARMMessage._DataGroup     = uvk_msg_dump->_DataGroup;
-                        arm_msg_dump._ARMMessage._DataSubGroup  = uvk_msg_dump->_DataSubGroup;
-                        uiCrc16Calc = CalculateCRC16 (&arm_msg_dump._ARMMessage._StationID [0], 13/*sizeof (TTUMSOut)-2-4*/); //13
-                        arm_msg_dump._ARMMessage._CRC16 [3]     =  RoutineCRC16ui162Char ( uiCrc16Calc & 0x000F);
-                        arm_msg_dump._ARMMessage._CRC16 [2]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x00F0) >> 4);
-                        arm_msg_dump._ARMMessage._CRC16 [1]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x0F00) >> 8);
-                        arm_msg_dump._ARMMessage._CRC16 [0]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0xF000) >> 12);
-                        arm_msg_dump._ARMMessage._BracketEnd    = ')';
-                        arm_msg_dump._ps = 10;
-                        //iSysRoutineRes = write (tums1_conn_ref.handle, &arm_msg_ps, 1);
-                        arm_msg_dump._vk = 13;
-                        //iSysRoutineRes = write (tums1_conn_ref.handle, &arm_msg_vk, 1);
-                        //arm_msg_dump._asterix = '*';
-                        iSysRoutineRes = write (tums1_conn_ref.handle, 
-                                                &arm_msg_dump._ARMMessage, 
-                                                sizeof (TTUMSOutPacket));
-                    }
-                    else
-                    {
-                        printf (" <-BAD_MSG_LEN (%zu)>", tums1_conn_ref.msgBuffer.size ());
-                    }
-                    tums1_conn_ref.bmsgStart = false;
-                    tums1_conn_ref.msgBuffer.clear ();
-                }
-                else;
-            } 
-            fflush (stdout);
+            //std::cout << ConsoleLock << read_c << std::flush << ConsoleUnlock; 
         }
         else
-        if (iSysRoutineRes == -1) // timeout or error!
+        if (SysRoutineRes == -1) // timeout or error!
         {
             if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
             {
-                printf ("<TIME_OUT>");  fflush (stdout);
+                std::cout << ConsoleLock << "<TIME_OUT>" << std::fflush << ConsoleUnlock;            
                 usleep (10000);
                 continue;
             }
             else
             {  
-                printf ("read return : %d (errno : %d)\n", iSysRoutineRes, errno);
+                std::cout << ConsoleLock 
+                          << "read return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
+                          << ConsoleUnlock;
                 break;
             }
         }
         else
         {
-            printf ("read return : %d (errno : %d)\n", iSysRoutineRes, errno);
+            std::cout << ConsoleLock 
+                      << "read return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
+                      << ConsoleUnlock;
             break;
         }
-   }
-   // close connection - "select" or "read" return < 0
-   close (tums1_conn_ref.handle);
+        //
+    } // end wile (...)
+    
+    pthread_exit (reinterpret_cast<void*>(0x00000000));
+}
 
-   goto next_iteration; // XA-XA-XA
+////////
+// main
+int main (int argc, char** argv)
+{
+//var
+    // configuration
+    char strCFGParam [nsCFG::_BUFF_MAX+1];
+
+    // serial connection
+    int iSysRoutineRes = -1;
+    TSerial& tums1_conn_ref = nsTUMS::TUMS_conn [TUMS_FIRST_IDX];
+
+    // for read
+    //char read_c;
+    char d;
+    unsigned int read_size;
+    uint16_t uiCrc16Calc,
+             uiCrc16Recv;
+    //TTUMSIn* uvk_msg_dump = NULL;
+    //Mtx ConsoleSup;
+   
+    // for write
+    //TTUMSOutPacket arm_msg_dump;
+    char _ps = 10;
+    char _vk = 13;
+
+//code
+    std::cout << "Start stan module (port for linux) ... " << std::endl;
+    std::cout << "Version 0.0.xxxx (20210202.xx:xx:xx)!" << std::endl;
+
+    // get configuration
+    std::cout << "Configuration ... " << std::endl;
+    ProgramConfig tums_cfg (".//tums_link.conf", "");
+    nsTUMS::count = tums_cfg.GetIntParam ("TUMS.COUNT",0);
+    std::cout << "TUMSs:" << nsTUMS::count  << std::endl << std::endl;
+    if (nsTUMS::count <= 0)
+    {
+        std::cout <<  "No any TUMS's. Check \"tums_link.conf\". Exit (sorry)!\n" << std::endl;
+        return -1;
+    }
+    else;
+    if (nsTUMS::count > TUMS_MAX)
+    {
+        std::cout << "Any more TUMS's (max 16). Check \"tums_link.conf\". Exit (sorry)!\n"  << std::endl;
+        return -1;
+    }
+    else;
+
+    // get configuration
+    for (uint32_t tums_iterator = 1; tums_iterator <= nsTUMS::count; tums_iterator++)
+    {
+        nsTUMS::TUMS_conn [tums_iterator].id = tums_iterator;
+
+        snprintf (strCFGParam, 
+                  nsCFG::_BUFF_MAX, 
+                  "TUMS.%d.LINK.SERIAL.DEVICE", 
+                  tums_iterator);
+        nsTUMS::TUMS_conn [tums_iterator].devName = tums_cfg.GetStringParam (strCFGParam, "null");
+    }
+
+    // print configuration
+    for (uint32_t tums_iterator = 1; tums_iterator <= nsTUMS::count; tums_iterator++)
+    {
+        std::cout << "TUMS:" << tums_iterator << std::endl;
+        std::cout << "   internal_id:" << nsTUMS::TUMS_conn [tums_iterator].id << std::endl;
+        std::cout << "   device_name:" << nsTUMS::TUMS_conn [tums_iterator].devName << std::endl;
+    }
+
+    tums1_conn_ref.sp_read.setDeviceName (tums1_conn_ref.devName.c_str());
+    tums1_conn_ref.sp_read.Open ();
+    tums1_conn_ref.sp_read.setConnectionAttr (B2400, CS8, ~PARENB, ~CSTOPB);
+    tums1_conn_ref.sp_read.setTimeout (1, 0);
+
+    tums1_conn_ref.sp_write.setDeviceName (tums1_conn_ref.devName.c_str());
+    tums1_conn_ref.sp_write.Open ();
+    tums1_conn_ref.sp_write.setConnectionAttr (B2400, CS8, ~PARENB, ~CSTOPB);
+    tums1_conn_ref.sp_write.setTimeout (1, 0);
+   
+    // run thread read data from serial_port
+    pthread_t ptht;
+    pthread_create (&ptht, NULL, thread_tums_serial, (void*)&nsTUMS::TUMS_conn [1]);
+
+    while (true)
+    {
+        // check buffer
+        if (tums1_conn_ref.dataBuffer.empty ()) 
+        {
+            usleep (100); 
+            continue;
+        }
+        else;
+
+        // get symbol
+        d = tums1_conn_ref.dataBuffer.get ();
+
+        // check start message
+        if (tums1_conn_ref.msgStart == false) // ищем начало сообщения
+        {
+            if (d =='(') // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы
+            {
+                tums1_conn_ref.msgStart = true;
+                tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(d));
+            }
+            else
+            {
+                printf ("\033[1;31m%c\033[0m", d);
+            } 
+        }
+        else
+        {
+            // analize message
+            tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(d));
+            if (d == ')')
+            {
+                if (tums1_conn_ref.msgBuffer.size () == sizeof (TTUMSIn)) // 32 
+                {
+                    tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
+                    printf ("\033[1;33m%s\033[0m", (char*) &tums1_conn_ref.msgBuffer [0]);
+                    printf (" \033[1;34m<+NEW_MSG>\033[0m");
+
+                    tums1_conn_ref.msg_in = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
+                    // Run crc16 routine
+                    // Skeep '(', ')', CRC16 field
+                    uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msg_in->_StationID [0], sizeof (TTUMSIn)-1-4-1); //26
+                    printf (" <CRC16(calc) = 0x%04X>", uiCrc16Calc);
+                    uiCrc16Recv = 0x0000;
+                    uiCrc16Recv  =  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [3]);
+                    uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [2]) << 4);
+                    uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [1]) << 8);
+                    uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [0]) << 12);
+                    if (uiCrc16Calc == uiCrc16Recv)
+                        printf (" \033[1;32m<+CRC16>\033[0m");
+                    else;
+
+                    // send answer
+                    bzero (&tums1_conn_ref.msg_out, sizeof (TTUMSOut));
+                    tums1_conn_ref.msg_out._BracketStart  = '(';
+                    tums1_conn_ref.msg_out._StationID [0] = tums1_conn_ref.msg_in->_StationID [0];
+                    tums1_conn_ref.msg_out._StationID [1] = tums1_conn_ref.msg_in->_StationID [1];
+                    tums1_conn_ref.msg_out._StationID [2] = tums1_conn_ref.msg_in->_StationID [2];
+                    tums1_conn_ref.msg_out._StationID [3] = tums1_conn_ref.msg_in->_StationID [3];
+                    tums1_conn_ref.msg_out._StationID [4] = tums1_conn_ref.msg_in->_StationID [4];
+                    tums1_conn_ref.msg_out._StationID [5] = tums1_conn_ref.msg_in->_StationID [5];
+                    tums1_conn_ref.msg_out._MsgNum [0]    = tums1_conn_ref.msg_in->_MsgNum [0];
+                    tums1_conn_ref.msg_out._MsgNum [1]    = tums1_conn_ref.msg_in->_MsgNum [1];
+                    tums1_conn_ref.msg_out._MsgNum [2]    = tums1_conn_ref.msg_in->_MsgNum [2];
+                    tums1_conn_ref.msg_out._MsgNum [3]    = tums1_conn_ref.msg_in->_MsgNum [3];
+                    tums1_conn_ref.msg_out._DataHead      = 'A'; //msg_in->_DataHead;
+                    tums1_conn_ref.msg_out._DataGroup     = tums1_conn_ref.msg_in->_DataGroup;
+                    tums1_conn_ref.msg_out._DataSubGroup  = tums1_conn_ref.msg_in->_DataSubGroup;
+                    uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msg_out._StationID [0], 13); //sizeof (TTUMSOut)-2-4); //13
+                    tums1_conn_ref.msg_out._CRC16 [3]     =  RoutineCRC16ui162Char ( uiCrc16Calc & 0x000F);
+                    tums1_conn_ref.msg_out._CRC16 [2]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x00F0) >> 4);
+                    tums1_conn_ref.msg_out._CRC16 [1]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0x0F00) >> 8);
+                    tums1_conn_ref.msg_out._CRC16 [0]     =  RoutineCRC16ui162Char ((uiCrc16Calc & 0xF000) >> 12);
+                    tums1_conn_ref.msg_out._BracketEnd    = ')';
+                    tums1_conn_ref.sp_write.Write ((char*) &tums1_conn_ref.msg_out, sizeof (TTUMSOut));
+                    tums1_conn_ref.sp_write.Write (&_ps, 1);
+                    tums1_conn_ref.sp_write.Write (&_vk, 1);
+                }
+                else
+                {
+                    printf ("\033[1;31m<BAD_MSG_LEN (%zu)>\033[0m\n", tums1_conn_ref.msgBuffer.size ());
+                    tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
+                    printf ("\033[1;31m%s\033[0m\n", (char*) &tums1_conn_ref.msgBuffer [0]);
+                }
+                tums1_conn_ref.msgStart = false;
+                tums1_conn_ref.msgBuffer.clear ();
+            }
+            else
+            {
+                if (tums1_conn_ref.msgBuffer.size () > sizeof (TTUMSIn))
+                {
+                    printf ("\033[1;31m<BUFFER_OVERFLOW_DATA_IS_RESET (LEN=%zu)>\033[0m\n", tums1_conn_ref.msgBuffer.size ());
+                    tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
+                    printf ("\033[1;31m%s\033[0m\n", (char*) &tums1_conn_ref.msgBuffer [0]);
+
+                    tums1_conn_ref.msgStart = false;
+                    tums1_conn_ref.msgBuffer.clear ();
+                }
+                else;
+            }
+        } 
+        fflush (stdout);
+        //
+    } // while (1) { ... }
 }
