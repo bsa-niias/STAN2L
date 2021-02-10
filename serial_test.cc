@@ -15,6 +15,8 @@
 #include <vector>
 #include <assert.h>
 #include <pthread.h>
+#include <iostream>
+#include <iomanip>
 
 // dev include
 #include "source/crc/crc16.h"
@@ -103,9 +105,19 @@ namespace nsTUMS
 
 ////////
 // thread_serial_work
-////////
 static void* thread_tums_serial (void* thread_param)
 {
+//type's
+// exception for serial port thread only
+class sp_exception
+{
+public:
+    sp_exception (uint32_t _e = -1) : error (_e) {}
+    uint32_t getError () { return error; }
+private:
+    uint32_t error;    
+};
+
 //var
     TSerial* conn = NULL;
     int SysRoutineRes = -1;
@@ -114,72 +126,78 @@ static void* thread_tums_serial (void* thread_param)
 //thread_code
     if (thread_param == NULL) 
     {
-        std::cout << ConsoleLock << "\"thread_param\" invalid. Exit." << std::endl << ConsoleUnlock;
+        std::cerr << ConsoleLock 
+                  << "\033[1;31m" << "\"thread_param\" invalid. Exit." << "\033[0m" << std::endl 
+                  << ConsoleUnlock;
         pthread_exit (reinterpret_cast<void*>(0xE0000001));
     }
     else;
 
     // global memory from "main" routine
     conn = (TSerial*)thread_param;
-    std::cout << ConsoleLock << "\"thread_id\"=" << conn->id << " start ..." << std::endl << ConsoleUnlock;
+    std::cout << ConsoleLock 
+              << "\"thread_id\"=" << conn->id << " start ..." << std::endl 
+              << ConsoleUnlock;
 
-    while (true)
+    try
     {
-        SysRoutineRes = conn->sp_read.wait ();
+        while (true)
+        {
+            SysRoutineRes = conn->sp_read.wait (); // "wait" use FD_ISSET
         
-        if (SysRoutineRes > 0)
-        {
-            //if (FD_ISSET (conn->sp_read.getDeviceHandle (), &conn->fds_reads)); 
-            //else
-            //{
-            //    break; // Error - reconection!
-            //}
-        }
-        else
-        {
-            std::cout << ConsoleLock 
-                      << "select return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
-                      << ConsoleUnlock;
-            if (SysRoutineRes == 0) continue; // Timeout == 2 sec. Sleep not need
+            if (SysRoutineRes > 0); // can read data
             else
-            if (SysRoutineRes < 0)  break;    // Error -> reconection!
-            else;
-        }
-        // read data
-        SysRoutineRes = conn->sp_read.Read_1b (&read_c);
-        conn->dataBuffer.put (read_c);
-
-        if (SysRoutineRes > 0) // read ok!
-        {
-            //std::cout << ConsoleLock << read_c << std::flush << ConsoleUnlock; 
-        }
-        else
-        if (SysRoutineRes == -1) // timeout or error!
-        {
-            if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
             {
-                std::cout << ConsoleLock << "<TIME_OUT>" << std::fflush << ConsoleUnlock;            
-                usleep (10000);
+                std::cerr << ConsoleLock 
+                          << "\033[1;31m" << "select return:" << SysRoutineRes 
+                          << "(errno:" << errno << ")" << "\033[0m" << std::endl
+                          << ConsoleUnlock;
+                if (SysRoutineRes == 0) continue; // Timeout == 2 sec. Sleep not need
+                else;
+
+                throw sp_exception (0xE0000002); // Error (SysRoutineRes < 0) -> reconection need!
+            }
+            
+            // read data
+            SysRoutineRes = conn->sp_read.Read_1b (&read_c);
+
+            if (SysRoutineRes > 0) // read ok!
+            {
+                conn->dataBuffer.put (read_c);
                 continue;
             }
             else
-            {  
-                std::cout << ConsoleLock 
-                          << "read return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
-                          << ConsoleUnlock;
-                break;
+            if (SysRoutineRes == -1) // timeout or error! "\033[1;32m<+CRC16>\033[0m"
+            {
+                if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
+                {
+                    std::cerr << ConsoleLock 
+                              << "\033[1;31m" << "<TIME_OUT>" << "\033[0m" << std::fflush 
+                              << ConsoleUnlock;            
+                    usleep (1000);
+                    continue;
+                }
+                else;
             }
-        }
-        else
-        {
-            std::cout << ConsoleLock 
-                      << "read return:" << SysRoutineRes << "(errno:" << errno << ")" << std::endl
+            else;
+
+            std::cerr << ConsoleLock 
+                      << "\033[1;31m" << "read return:" << SysRoutineRes 
+                      << "(errno:" << errno << ")" << "\033[0m" << std::endl
                       << ConsoleUnlock;
-            break;
-        }
-        //
-    } // end wile (...)
-    
+            throw sp_exception (0xE0000003); // Error read routine (<=0) -> reconection need!
+            //
+        } // end while (...)
+    }
+    catch (sp_exception& spe)
+    {
+        std::cerr << ConsoleLock 
+                  << "\033[1;31m" << "sp_exception get:" << std::hex << spe.getError () 
+                  << "(errno:" << errno << ")" << "\033[0m" << std::endl
+                  << ConsoleUnlock;
+        pthread_exit (reinterpret_cast<void*>(spe.getError ()));
+    }
+
     pthread_exit (reinterpret_cast<void*>(0x00000000));
 }
 
@@ -281,7 +299,8 @@ int main (int argc, char** argv)
         // check start message
         if (tums1_conn_ref.msgStart == false) // ищем начало сообщения
         {
-            if (d =='(') // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы
+            // Здесь ошибка - если встречается Q(@@@@@ - сбой в логике программы до ')'
+            if (d =='(') 
             {
                 tums1_conn_ref.msgStart = true;
                 tums1_conn_ref.msgBuffer.push_back (static_cast<uint8_t>(d));
@@ -301,21 +320,21 @@ int main (int argc, char** argv)
                 {
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
                     printf ("\033[1;33m%s\033[0m", (char*) &tums1_conn_ref.msgBuffer [0]);
-                    printf (" \033[1;34m<+NEW_MSG>\033[0m");
+                    //printf (" \033[1;34m<+NEW_MSG>\033[0m");
 
                     tums1_conn_ref.msg_in = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
                     // Run crc16 routine
                     // Skeep '(', ')', CRC16 field
                     uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msg_in->_StationID [0], sizeof (TTUMSIn)-1-4-1); //26
-                    printf (" <CRC16(calc) = 0x%04X>", uiCrc16Calc);
+                    //printf (" <CRC16(calc) = 0x%04X>", uiCrc16Calc);
                     uiCrc16Recv = 0x0000;
                     uiCrc16Recv  =  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [3]);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [2]) << 4);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [1]) << 8);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [0]) << 12);
                     if (uiCrc16Calc == uiCrc16Recv)
-                        printf (" \033[1;32m<+CRC16>\033[0m");
-                    else;
+                          printf ("\033[1;32m<+CRC16>\033[0m");
+                    else  printf ("\033[1;31m<+CRC16>\033[0m");
 
                     // send answer
                     bzero (&tums1_conn_ref.msg_out, sizeof (TTUMSOut));
@@ -342,6 +361,8 @@ int main (int argc, char** argv)
                     tums1_conn_ref.sp_write.Write ((char*) &tums1_conn_ref.msg_out, sizeof (TTUMSOut));
                     tums1_conn_ref.sp_write.Write (&_ps, 1);
                     tums1_conn_ref.sp_write.Write (&_vk, 1);
+
+                    printf ("\033[1;35m%.19s\033[0m", (char*) &tums1_conn_ref.msg_out);
                 }
                 else
                 {

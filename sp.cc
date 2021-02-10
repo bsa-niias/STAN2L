@@ -75,7 +75,7 @@ void SerialPort::setTimeout (time_t sec, long usec)
 
 int SerialPort_r::Open ()
 {
-    SysRoutineRes = ::open (DevName.c_str(), O_RDONLY | O_NOCTTY); // O_RDWR | O_NDELAY);  
+    SysRoutineRes = ::open (DevName.c_str(), O_RDONLY | O_NOCTTY | O_NDELAY); // O_RDWR | O_NDELAY);  
 
     if (SysRoutineRes == -1) 
          return -1;
@@ -157,12 +157,17 @@ int SerialPort_r::wait ()
                             0, 
                             &tv_reads);
 
-    //if (SysRoutineRes > 0)                        
-    //{
-    //     if (FD_ISSET (DevHandle, &fds_reads);
-    //     else;
-    //}
-    //else;
+    if (SysRoutineRes > 0)                        
+    {
+        // return SysRoutineRes > 0 !!!! see below
+        if (FD_ISSET (DevHandle, &fds_reads)); 
+        else
+        {
+            // is it impassible?
+            return 0;
+        }
+    }
+    else;
 
     return SysRoutineRes;
 }
