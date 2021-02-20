@@ -149,6 +149,7 @@ private:
         {
             SysRoutineRes = conn->sp_read.wait (); // "wait" use FD_ISSET
         
+            // this "SysRoutineRes" after "wait" routine
             if (SysRoutineRes > 0); // can read data
             else
             {
@@ -165,13 +166,14 @@ private:
             // read data
             SysRoutineRes = conn->sp_read.Read_1b (&read_c);
 
+            // this "SysRoutineRes" after "Read_1b" routine
             if (SysRoutineRes > 0) // read ok!
             {
                 conn->dataBuffer.put (read_c);
                 continue;
             }
             else
-            if (SysRoutineRes == -1) // timeout or error! "\033[1;32m<+CRC16>\033[0m"
+            if (SysRoutineRes == -1) // timeout or error!
             {
                 if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
                 {
