@@ -239,7 +239,7 @@ int main (int argc, char** argv)
     std::cout << "Configuration ... " << std::endl;
     ProgramConfig tums_cfg (".//tums_link.conf", "");
     nsTUMS::count = tums_cfg.GetIntParam ("TUMS.COUNT",0);
-    std::cout << "TUMSs:" << nsTUMS::count  << std::endl << std::endl;
+    std::cout << "TUMS's:" << nsTUMS::count << std::endl;
     if (nsTUMS::count <= 0)
     {
         std::cout <<  "No any TUMS's. Check \"tums_link.conf\". Exit (sorry)!\n" << std::endl;
@@ -268,7 +268,7 @@ int main (int argc, char** argv)
     // print configuration
     for (uint32_t tums_iterator = 1; tums_iterator <= nsTUMS::count; tums_iterator++)
     {
-        std::cout << "TUMS:" << tums_iterator << std::endl;
+        std::cout << "TUMS : " << tums_iterator << std::endl;
         std::cout << "   internal_id:" << nsTUMS::TUMS_conn [tums_iterator].id << std::endl;
         std::cout << "   device_name:" << nsTUMS::TUMS_conn [tums_iterator].devName << std::endl;
     }
@@ -311,7 +311,7 @@ int main (int argc, char** argv)
             }
             else
             {
-                printf ("\033[1;31m%c\033[0m", d);
+                std::cout << "\033[1;31m" << (char) d << "\033[0m";
             } 
         }
         else
@@ -323,24 +323,24 @@ int main (int argc, char** argv)
                 if (tums1_conn_ref.msgBuffer.size () == sizeof (TTUMSIn)) // 33
                 {
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
-                    printf ("\033[1;33m%s\033[0m", (char*) &tums1_conn_ref.msgBuffer [0]);
-                    //printf (" \033[1;34m<+NEW_MSG>\033[0m");
+                    std:cout << "\033[1;33m" << (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m";
 
                     tums1_conn_ref.msg_in = (TTUMSIn*) &tums1_conn_ref.msgBuffer [0];
                     // Run crc16 routine
                     // Skeep '(', ')', CRC16 field
                     uiCrc16Calc = CalculateCRC16 (&tums1_conn_ref.msg_in->_StationID [0], sizeof (TTUMSIn)-1-4-1); //27
-                    //printf (" <CRC16(calc) = 0x%04X>", uiCrc16Calc);
                     uiCrc16Recv = 0x0000;
                     uiCrc16Recv  =  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [3]);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [2]) << 4);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [1]) << 8);
                     uiCrc16Recv |= (RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_CRC16 [0]) << 12);
                     if (uiCrc16Calc != uiCrc16Recv)
-                          printf ("\033[1;31m<-CRC16(0x%04X)>\033[0m", uiCrc16Calc);
+                    {
+                        std::cout << "\033[1;31m" << "-CRC16(0x" << std::hex << uiCrc16Calc << ")>" << "'\033[0m";
+                    }
                     else 
                     { 
-                        printf ("\033[1;32m<+CRC16>\033[0m");
+                        std::cout << "\033[1;32m<+CRC16>\033[0m";
 
                         // send answer
                         bzero (&tums1_conn_ref.msg_out, sizeof (TTUMSOut));
@@ -369,14 +369,16 @@ int main (int argc, char** argv)
                         tums1_conn_ref.sp_write.Write (&_ps, 1);
                         tums1_conn_ref.sp_write.Write (&_vk, 1);
 
-                        printf ("\033[1;35m%.20s\033[0m", (char*) &tums1_conn_ref.msg_out);
+                        std::cout << "\033[1;35m" << std::setw (20) << (char*) &tums1_conn_ref.msg_out << "\033[0m"; // %.20s
                     }
                 }
                 else
                 {
-                    printf ("\033[1;31m<BAD_MSG_LEN (%zu)>\033[0m\n", tums1_conn_ref.msgBuffer.size ());
+                    std::cout << "\033[1;31m"  
+                              << "<BAD_MSG_LEN (" << tums1_conn_ref.msgBuffer.size ()  << ")"
+                              << "\033[0m" << std::endl;
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
-                    printf ("\033[1;31m%s\033[0m\n", (char*) &tums1_conn_ref.msgBuffer [0]);
+                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m" << std::endl;
                 }
                 tums1_conn_ref.msgStart = false;
                 tums1_conn_ref.msgBuffer.clear ();
@@ -385,9 +387,11 @@ int main (int argc, char** argv)
             {
                 if (tums1_conn_ref.msgBuffer.size () > sizeof (TTUMSIn))
                 {
-                    printf ("\033[1;31m<BUFFER_OVERFLOW_DATA_IS_RESET (LEN=%zu)>\033[0m\n", tums1_conn_ref.msgBuffer.size ());
+                    std::cout << "\033[1;31m"  
+                              << "<BUFFER_OVERFLOW_DATA_IS_RESET (LEN=" << tums1_conn_ref.msgBuffer.size () << ")>" //%zu
+                              << "\033[0m" << std::endl;
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
-                    printf ("\033[1;31m%s\033[0m\n", (char*) &tums1_conn_ref.msgBuffer [0]);
+                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m" << std::endl;
 
                     tums1_conn_ref.msgStart = false;
                     tums1_conn_ref.msgBuffer.clear ();
