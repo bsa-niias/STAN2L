@@ -6,6 +6,7 @@
 
 // system include
 #include <stdio.h>
+//#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -125,7 +126,7 @@ private:
 //var
     TSerial* conn = NULL;
     int SysRoutineRes = -1;
-    char read_c;
+    char read_c; 
 
 //thread_code
     if (thread_param == NULL) 
@@ -294,7 +295,7 @@ int main (int argc, char** argv)
         // check buffer
         if (tums1_conn_ref.dataBuffer.empty ()) 
         {
-            usleep (100); 
+            usleep (10000); 
             continue;
         }
         else;
@@ -378,9 +379,9 @@ int main (int argc, char** argv)
                 {
                     std::cout << "\033[1;31m"  
                               << "<BAD_MSG_LEN (" << tums1_conn_ref.msgBuffer.size ()  << ")"
-                              << "\033[0m" << std::endl;
+                              << "\033[0m";// << std::endl;
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
-                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m" << std::endl;
+                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m";// << std::endl;
                 }
                 tums1_conn_ref.msgStart = false;
                 tums1_conn_ref.msgBuffer.clear ();
@@ -391,9 +392,9 @@ int main (int argc, char** argv)
                 {
                     std::cout << "\033[1;31m"  
                               << "<BUFFER_OVERFLOW_DATA_IS_RESET (LEN=" << tums1_conn_ref.msgBuffer.size () << ")>" //%zu
-                              << "\033[0m" << std::endl;
+                              << "\033[0m";// << std::endl;
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
-                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m" << std::endl;
+                    std::cout << "\033[1;31m" <<  (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m";// << std::endl;
 
                     tums1_conn_ref.msgStart = false;
                     tums1_conn_ref.msgBuffer.clear ();

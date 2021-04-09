@@ -1,6 +1,8 @@
 #ifndef __CIRCLE_BUFFER__
 #define __CIRCLE_BUFFER__
 
+#include <stdio.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include "mtx.hpp"
 
@@ -147,6 +149,39 @@ void put (BT _d)
 {
     access.Lock ();
     buffer.put (_d); 
+    access.Unlock ();
+}
+
+/*
+void putEx (uint32_t _count, ...)
+{
+// local variable    
+    va_list args;   // arguments
+    BT d;           // data
+    uint32_t arg_index = 0;
+
+// ...
+//code
+    va_start (args, _count);
+
+    access.Lock ();
+    for (arg_index = 1; arg_index <= _count; arg_index++)
+    {
+        d = va_arg (args, BT);
+        buffer.put (d); 
+    }
+    access.Unlock ();
+}
+*/
+
+void putEx5 (BT d1, BT d2, BT d3, BT d4, BT d5)
+{
+    access.Lock ();
+        buffer.put (d1); 
+        buffer.put (d2); 
+        buffer.put (d3); 
+        buffer.put (d4); 
+        buffer.put (d5); 
     access.Unlock ();
 }
 
