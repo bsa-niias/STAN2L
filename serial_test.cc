@@ -335,14 +335,14 @@ int main (int argc, char** argv)
                     localtime_r (&t_t, &t_tm);
                     clock_gettime (CLOCK_REALTIME, &t_ts);
                     std::cout << "\033[1;34m" << '['
-                             << std::dec << std::setfill ('0') << std::setw (4) << t_tm.tm_year+1900 << '.'
-                             << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_mon+1 << '.'
-                             << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_mday << '('
-                             << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_hour << ':'
-                             << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_min << ':'
-                             << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_sec << '_'
-                             << std::dec << std::setfill ('0') << std::setw (3) << (uint32_t) t_ts.tv_nsec / 1000000
-                             << ")]" << "\033[0m";
+                              << std::dec << std::setfill ('0') << std::setw (4) << t_tm.tm_year+1900 << '.'
+                              << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_mon+1 << '.'
+                              << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_mday << '('
+                              << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_hour << ':'
+                              << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_min << ':'
+                              << std::dec << std::setfill ('0') << std::setw (2) << t_tm.tm_sec << '_'
+                              << std::dec << std::setfill ('0') << std::setw (3) << (uint32_t) t_ts.tv_nsec / 1000000
+                              << ")]" << "\033[0m";
 
                     tums1_conn_ref.msgBuffer.push_back (0x00); // only for print to screen !!!
                     std::cout << "\033[1;33m" << (char*) &tums1_conn_ref.msgBuffer [0] << "\033[0m";
