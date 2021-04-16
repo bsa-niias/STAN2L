@@ -6,6 +6,7 @@
 
 // system include
 #include <stdio.h>
+#include <stdlib.h>
 //#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -21,6 +22,9 @@
 #include <iostream>
 #include <iomanip>
 #include <time.h>
+// for ipc queue
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 // dev include
 #include "source/crc/crc16.h"
@@ -79,6 +83,9 @@ typedef struct
 //
 } __attribute__((packed)) TTUMSOutPacket;
 
+// ipc
+#include "stan2l_ipc.hpp"
+
 // struct for connection with TUMS_n with using serial port
 // - in global namespace
 // - init in routine "main"
@@ -102,6 +109,7 @@ public:
 
 const uint32_t TUMS_MAX       = 8; // index == 0 ignored !!!
 const uint32_t TUMS_FIRST_IDX = 1;
+//const 
 
 namespace nsTUMS
 {
@@ -231,13 +239,19 @@ int main (int argc, char** argv)
     unsigned int read_size;
     uint16_t uiCrc16Calc,
              uiCrc16Recv;
-    //TTUMSIn* uvk_msg_dump = NULL;
-    //Mtx ConsoleSup;
    
     // for write
-    //TTUMSOutPacket arm_msg_dump;
     char _ps = 10;
     char _vk = 13;
+
+    // for queue
+    key_t msgque_tumsts_key;
+    int   msgque_tumsts_id;
+    TTUMS_IPC_TS tumsts_ipcmsg;
+    int msgctl_res;
+    int msgsnd_res;
+    msqid_ds msgque_tumsts_ctl;
+    const uint32_t MSGQUE_TUMSTS_SIZE = 250;
 
 //code
     std::cout << "Start stan module (port for linux) ... " << std::endl;
@@ -291,10 +305,53 @@ int main (int argc, char** argv)
     tums1_conn_ref.sp_write.setConnectionAttr (B2400, CS8, ~PARENB, ~CSTOPB);
     tums1_conn_ref.sp_write.setTimeout (1, 0);
    
+    // create queue for send TUMS TS
+    // 1) get key message queue
+    msgque_tumsts_key = ftok ("/work/dev/stan2l", 11111);
+    std::cout << "msgque_tumsts_key = " << std::hex << msgque_tumsts_key << std::endl;        
+    if (msgque_tumsts_key == -1)
+    {
+        std::cout << "Error get key IPC queue (ftok (...) return -1 (errno = " << errno << "))" << std::endl;
+        return -2;
+    }
+    else;
+    // 2) get or create message queue
+    msgque_tumsts_id = msgget (msgque_tumsts_key, IPC_CREAT | 0666);
+    std::cout << "msgque_tumsts_id = " << std::hex << msgque_tumsts_id << std::endl;        
+    if (msgque_tumsts_id == -1)
+    {
+        std::cout << "Error create(1) IPC queue (msgget (...) return -1 (errno = " << errno << "))" << std::endl;
+        return -2;
+    }
+    else;
+    // 3) need delete message queue - delete old data
+    msgctl_res = msgctl (msgque_tumsts_id, IPC_RMID, NULL);
+    std::cout << "msgctl[1] (...) return : " << msgctl_res << " (errno = " << errno << ")" << std::endl;  
+    // Need check error      
+    // 4) renew messsage queue
+    msgque_tumsts_id = msgget (msgque_tumsts_key, IPC_CREAT | 0666);
+    std::cout << "msgque_tumsts_id = " << std::hex << msgque_tumsts_id << std::endl;        
+    if (msgque_tumsts_id == -1)
+    {
+        std::cout << "Error create(2) IPC queue (msgget (...) return -1 (errno = " << errno << "))" << std::endl;
+        return -2;
+    }
+    else;
+    // 5) get queue size
+    msgctl_res = msgctl (msgque_tumsts_id, IPC_STAT, &msgque_tumsts_ctl);
+    std::cout << "msgctl[2] (...) return : " << msgctl_res << " (errno = " << errno << ")" << std::endl;  
+    // 6) set queue size
+    msgque_tumsts_ctl.msg_qbytes = MSGQUE_TUMSTS_SIZE;
+    msgctl_res = msgctl (msgque_tumsts_id, IPC_SET, &msgque_tumsts_ctl);
+    std::cout << "msgctl[3] (...) return : " << msgctl_res << " (errno = " << errno << ")" << std::endl;  
+    // 7) it's ok!
+
     // run thread read data from serial_port
     pthread_t ptht;
     pthread_create (&ptht, NULL, thread_tums_serial, (void*)&nsTUMS::TUMS_conn [1]);
 
+    // -----------
+    // MAIN CIRCLE
     while (true)
     {
         // check buffer
@@ -319,7 +376,7 @@ int main (int argc, char** argv)
             }
             else
             {
-                std::cout << "\033[1;31m" << (char) d << "\033[0m";
+                std::cout << "\033[1;31m" << (char) d << "\033[0m"; // It's so #10#13 effect!!!
             } 
         }
         else
@@ -392,6 +449,56 @@ int main (int argc, char** argv)
                         tums1_conn_ref.sp_write.Write (&_vk, 1);
 
                         std::cout << "\033[1;35m" << std::setw (20) << (char*) &tums1_conn_ref.msg_out << "\033[0m"; // %.20s
+
+                        // send ipc message
+                        tumsts_ipcmsg.ipc_std_mtype  = IPC_TUMS_TS;
+                        //
+                        tumsts_ipcmsg._PacketNumber  = 0x0000;
+                        tumsts_ipcmsg._PacketNumber |=  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_MsgNum [3]);
+                        tumsts_ipcmsg._PacketNumber |=  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_MsgNum [2]) << 4;
+                        tumsts_ipcmsg._PacketNumber |=  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_MsgNum [1]) << 8;
+                        tumsts_ipcmsg._PacketNumber |=  RoutineCRC16Char2ui16 (tums1_conn_ref.msg_in->_MsgNum [0]) << 12;
+                        //
+                        tumsts_ipcmsg._BracketStart  = tums1_conn_ref.msg_in->_BracketStart;
+                        tumsts_ipcmsg._DataHead      = tums1_conn_ref.msg_in->_DataHead;
+                        tumsts_ipcmsg._TUMSNum       = tums1_conn_ref.msg_in->_TUMSNum;
+                        tumsts_ipcmsg._DataGroup     = tums1_conn_ref.msg_in->_DataGroup;
+                        tumsts_ipcmsg._DataSubGroup  = tums1_conn_ref.msg_in->_DataSubGroup;
+                        tumsts_ipcmsg._Data [0]      = tums1_conn_ref.msg_in->_Data [0];
+                        tumsts_ipcmsg._Data [1]      = tums1_conn_ref.msg_in->_Data [1];
+                        tumsts_ipcmsg._Data [2]      = tums1_conn_ref.msg_in->_Data [2];
+                        tumsts_ipcmsg._Data [3]      = tums1_conn_ref.msg_in->_Data [3];
+                        tumsts_ipcmsg._Data [4]      = tums1_conn_ref.msg_in->_Data [4];
+                        tumsts_ipcmsg._ChannelStatus = tums1_conn_ref.msg_in->_ChannelStatus;
+                        tumsts_ipcmsg._DiagType      = tums1_conn_ref.msg_in->_DiagType;
+                        tumsts_ipcmsg._Diag [0]      = tums1_conn_ref.msg_in->_Diag [0];
+                        tumsts_ipcmsg._Diag [1]      = tums1_conn_ref.msg_in->_Diag [1];
+                        tumsts_ipcmsg._Diag [2]      = tums1_conn_ref.msg_in->_Diag [2];
+                        tumsts_ipcmsg._Diag [3]      = tums1_conn_ref.msg_in->_Diag [3];
+                        tumsts_ipcmsg._Diag [4]      = tums1_conn_ref.msg_in->_Diag [4];
+                        tumsts_ipcmsg._Mif           = tums1_conn_ref.msg_in->_Mif; 
+                        tumsts_ipcmsg._BracketEnd    = tums1_conn_ref.msg_in->_BracketEnd;
+                        tumsts_ipcmsg._crc16         = 0x0000;
+                        msgsnd_res = msgsnd (msgque_tumsts_id, 
+                                             &tumsts_ipcmsg.ipc_std_mtype, 
+                                             sizeof (TTUMS_IPC_TS) - sizeof (long),
+                                             IPC_NOWAIT);
+                        
+                        std::cout << " ipc_msgsnd (IPC_TUMS_TS:" << std::hex << std::uppercase << "0x" << tumsts_ipcmsg._PacketNumber << ")";
+                        if (msgsnd_res != 0)
+                        {
+                            std::cout << std::endl << std::dec << "msgsnd (...) return : " << msgsnd_res << " (errno = " << errno << ")";
+                            msgctl_res = msgctl (msgque_tumsts_id, IPC_RMID, NULL);
+                            std::cout << std::endl << std::dec << "msgctl[4] (...) return : " << msgctl_res << " (errno = " << errno << ")";
+                            msgque_tumsts_id = msgget (msgque_tumsts_key, IPC_CREAT | 0666);
+                            std::cout << std::endl << std::dec << "msgque_tumsts_id = " << msgque_tumsts_id;
+                            msgctl_res = msgctl (msgque_tumsts_id, IPC_STAT, &msgque_tumsts_ctl);
+                            std::cout << std::endl << "msgctl[5] (...) return : " << msgctl_res << " (errno = " << errno << ")";  
+                            msgque_tumsts_ctl.msg_qbytes = MSGQUE_TUMSTS_SIZE;
+                            msgctl_res = msgctl (msgque_tumsts_id, IPC_SET, &msgque_tumsts_ctl);
+                            std::cout << std::endl << "msgctl[6] (...) return : " << msgctl_res << " (errno = " << errno << ")";  
+                        }
+                        else;
                     }
                 }
                 else
